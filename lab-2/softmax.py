@@ -1,5 +1,9 @@
 import numpy as np
+from numpy.core.fromnumeric import size
 from lab2.activations import softmax
+from functools import reduce
+
+from lab2.train import X_train
 
 class SoftmaxClassifier:
     def __init__(self, input_shape, num_classes):
@@ -51,14 +55,16 @@ class SoftmaxClassifier:
 
         # run mini-batch gradient descent
         for iteration in range(0, steps):
+            print(f"mini-batch no. {iteration}")
+
             # TODO your code here
             # sample a batch of images from the training set
             # you might find np.random.choice useful
-            indices = None
-            X_batch, y_batch = None, None
+            indices = np.random.choice(len(X_train), bs)
+            X_batch, y_batch = X_train[indices], y_train[indices]
             # compute the loss and dW
-            dW = None
-            loss = None
+            dW = self.__compute_gradient(X_batch, y_batch)
+            loss = self.__compute_loss(X_batch, y_batch, bs, reg_strength)
             # end TODO your code here
             # perform a parameter update
             self.__weights -= lr * dW
@@ -97,9 +103,35 @@ class SoftmaxClassifier:
 
         return True
 
-    def __compute_output(self, X, with_softmax=True):
+    def __compute_output(self, X: np.ndarray, with_softmax: bool=True):
         # Compute the output column
         output = np.dot(X, self.__weights)
         output = softmax(output) if with_softmax else output 
         return output
+
+    def __compute_gradient(self, X_batch: np.ndarray, y_batch: np.ndarray):
+        # Compute the gradient of the mini-batch
+        X_batch_transposed                        = X_batch.transpose()
+        one_hot                                   = np.zeros(y_batch.size, (self.__num_classes))
+        one_hot[np.arange(y_batch.size), y_batch] = 1
+        CT                                        = softmax(X_batch * self.__weights) - one_hot
+        return np.dot(X_batch_transposed, CT)
+
+    def __compute_loss(self, X_batch: np.ndarray, y_batch: np.ndarray, regularization_strength: float):
+        average_loss = self.__compute_average_loss(X_batch, y_batch)
+        regularization_term = self.__compute_regularization_term(regularization_strength)
+        return average_loss + regularization_term 
+        
+    def __compute_average_loss(self, X_batch: np.ndarray, y_batch: np.ndarray):
+        losses = np.vectorize(self.__compute_image_loss)(np.column_stack(X_batch, y_batch))
+        return 1 / X_batch.size() * losses.sum()
+
+    def __compute_image_loss(self, X_and_y):
+        X, y = X_and_y
+        output = self.__compute_output(X)
+        return -1 * output[y] + np.log(np.sum(np.exp(output)))
+
+    def __compute_regularization_term(self, regularization_strength):
+        sum_of_weights_squares = sum(self.__weights ** 2)
+        return regularization_strength * sum_of_weights_squares
 
